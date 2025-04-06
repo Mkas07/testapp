@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Healthcare Translator</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      max-width: 480px;
+      margin: auto;
+    }
+    .card {
+      background: white;
+      border-radius: 1rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      padding: 20px;
+      width: 100%;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 10px 0;
+      border: none;
+      border-radius: 8px;
+      background-color: #2563eb;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:disabled {
+      background-color: #94a3b8;
+      cursor: not-allowed;
+    }
+    .output {
+      margin-top: 15px;
+      padding: 10px;
+      background: #f1f5f9;
+      border-radius: 8px;
+    }
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Healthcare Translator</h1>
+
+    <button id="recordBtn">Start Speaking</button>
+    <button id="stopBtn" disabled>Stop Listening</button>
+    <div class="output">
+      <strong>Transcript:</strong>
+      <p id="transcript">...</p>
+    </div>
+    <div class="output">
+      <strong>Translation:</strong>
+      <p id="translation">...</p>
+    </div>
+    <button id="speakBtn" disabled>Speak Translation</button>
+    <button id="playAudioBtn" disabled>Play Audio of Translation</button>
+  </div>
+
+  <script>
+    const recordBtn = document.getElementById('recordBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const transcriptP = document.getElementById('transcript');
+    const translationP = document.getElementById('translation');
+    const speakBtn = document.getElementById('speakBtn');
+    const playAudioBtn = document.getElementById('playAudioBtn');
+
+    const recognition = 'webkitSpeechRecognition' in window
+      ? new webkitSpeechRecognition()
+      : null;
+
+    if (!recognition) {
+      alert('Speech Recognition not supported');
+    }
+
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.continuous = false;
+
+    recordBtn.onclick = () => {
+      recognition.start();
+      recordBtn.disabled = true;
+      recordBtn.textContent = 'Listening...';
+      stopBtn.disabled = false;
+    };
+
+    stopBtn.onclick = () => {
+      recognition.stop();
+      recordBtn.disabled = false;
+      recordBtn.textContent = 'Start Speaking';
+      stopBtn.disabled = true;
+    };
+
+    recognition.onresult = async (event) => {
+      const speechText = event.results[0][0].transcript;
+      transcriptP.textContent = speechText;
+      recordBtn.disabled = false;
+      recordBtn.textContent = 'Start Speaking';
+
+      // Log the data to see what is being sent
+      console.log("Sending this text to API:", speechText);
+
+      // Ensure the structure of JSON is { "text": "speechText" }
+      try {
+        const res = await fetch('https://testappnoa-851fee8495ac.herokuapp.com/api/gemini-translate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            text: speechText // Send the text in the correct structure
+          })
+        });
+
+        // Ensure that the response is a JSON object
+        const data = await res.json();
+        console.log("Response from API:", data);
+
+        // Only show the English translation now
+        if (data.translation) {
+          translationP.textContent = data.translation;
+          speakBtn.disabled = false;
+          playAudioBtn.disabled = false;  // Enable the play audio button
+        } else {
+          translationP.textContent = 'Translation failed.';
+          speakBtn.disabled = true;
+          playAudioBtn.disabled = true; // Disable audio play button if translation fails
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        translationP.textContent = 'Translation failed.';
+        speakBtn.disabled = true;
+        playAudioBtn.disabled = true;
+      }
+    };
+
+    recognition.onerror = (e) => {
+      alert('Speech recognition error: ' + e.error);
+      recordBtn.disabled = false;
+      recordBtn.textContent = 'Start Speaking';
+    };
+
+    speakBtn.onclick = () => {
+      // Get the English translation and read it aloud
+      const translationText = translationP.textContent;
+      const utterance = new SpeechSynthesisUtterance(translationText);
+      utterance.lang = 'en-US';
+      speechSynthesis.speak(utterance);
+    };
+
+    // Play audio of the translated text
+    playAudioBtn.onclick = () => {
+      const translationText = translationP.textContent;
+      const utterance = new SpeechSynthesisUtterance(translationText);
+      utterance.lang = 'en-US';  // Make sure the utterance is in English
+      speechSynthesis.speak(utterance);
+    };
+  </script>
+</body>
+</html>
